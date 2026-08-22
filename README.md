@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="src/ThemeForge/assets/images/favicon-96x96.png" width="96" height="96" alt="XoCrazy" />
+  <img src="src/XoCrazy/assets/images/favicon-96x96.png" width="96" height="96" alt="XoCrazy" />
 </p>
 
 <h1 align="center">XoCrazy</h1>
@@ -65,14 +65,14 @@ Then open it:
 You do **not** need the VS extension workload — the build pulls its tools from NuGet.
 
 ```bash
-msbuild src/ThemeForge/ThemeForge.csproj -t:restore
+msbuild src/XoCrazy/XoCrazy.csproj -t:restore
 ```
 
 ```bash
-msbuild src/ThemeForge/ThemeForge.csproj -t:rebuild -p:Configuration=Release
+msbuild src/XoCrazy/XoCrazy.csproj -t:rebuild -p:Configuration=Release
 ```
 
-The `.vsix` lands in `src/ThemeForge/bin/Release/`. Press <kbd>F5</kbd> instead to debug into the
+The `.vsix` lands in `src/XoCrazy/bin/Release/`. Press <kbd>F5</kbd> instead to debug into the
 experimental instance.
 
 ## Honest limits
@@ -91,7 +91,7 @@ experimental instance.
 
 | | |
 |---|---|
-| Your theme | `%APPDATA%\XoCrazy\current.themeforge.json` |
+| Your theme | `%APPDATA%\XoCrazy\current.xocrazy.json` |
 | Slot choices | `%APPDATA%\XoCrazy\selection.json` |
 | Diagnostic log | `%TEMP%\xocrazy.log` |
 
@@ -108,9 +108,9 @@ you press OK. XoCrazy writes both, on a 50 ms debounce, so a drag stays smooth a
 keeps up.
 
 ```
-src/ThemeForge/
-├─ ThemeForgePackage.cs        AsyncPackage; owns the commands
-├─ ThemeForge.vsct             menu placement + the Ctrl+K,Ctrl+; binding
+src/XoCrazy/
+├─ XoCrazyPackage.cs           AsyncPackage; owns the commands
+├─ XoCrazy.vsct                menu placement + the Ctrl+K,Ctrl+; binding
 ├─ Core/
 │  ├─ FontColorStore.cs        storage read/write + cache refresh
 │  ├─ EditorFormatBridge.cs    pushes colours into the maps the editor paints from
@@ -121,7 +121,7 @@ src/ThemeForge/
 │  ├─ ThemeStore.cs            the durable theme on disk
 │  ├─ ThemeApplier.cs          re-applies it at startup / first document / theme switch
 │  ├─ ThemePresets.cs          role-based palettes for the shipped themes
-│  ├─ ThemeForgeSession.cs     working set, live apply, revert, import
+│  ├─ XoCrazySession.cs        working set, live apply, revert, import
 │  ├─ LiveApplyQueue.cs        50 ms trailing debounce, coalesced per item
 │  ├─ EditHistory.cs           undo/redo steps, grouped by gesture
 │  ├─ Snapshot.cs              JSON capture/restore
@@ -129,7 +129,7 @@ src/ThemeForge/
 │  ├─ ColorMath.cs             COLORREF/ARGB, HSV, WCAG contrast, harmony
 │  └─ Json.cs                  minimal reader/writer, no dependencies
 └─ UI/
-   ├─ ThemeForgeControl.xaml   list + detail pane
+   ├─ XoCrazyControl.xaml      list + detail pane
    ├─ ColorPicker.xaml         HSV picker with live + committed events
    ├─ PresetPicker.xaml        preset cards, each rendered in its own palette
    └─ Eyedropper.cs            screen sampling in physical pixels

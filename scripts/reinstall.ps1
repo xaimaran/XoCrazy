@@ -19,9 +19,9 @@ $ErrorActionPreference = 'Stop'
 $ExtensionId = 'ThemeForge.7d3f1a20-9c44-4e7b-9f1e-2b6a8c5d3e01'
 $RepoRoot    = Split-Path -Parent $PSScriptRoot
 # The project was renamed ThemeForge -> XoCrazy; the Identity Id above deliberately was not.
-# The old ThemeForge.vsix still sitting in bin\ is a stale build output, not the current one.
-$Project     = Join-Path $RepoRoot 'src\ThemeForge\XoCrazy.csproj'
-$VsixPath    = Join-Path $RepoRoot "src\ThemeForge\bin\$Configuration\XoCrazy.vsix"
+# Changing it would make the next install a second extension beside the old one.
+$Project     = Join-Path $RepoRoot 'src\XoCrazy\XoCrazy.csproj'
+$VsixPath    = Join-Path $RepoRoot "src\XoCrazy\bin\$Configuration\XoCrazy.vsix"
 
 # Locate the VS install rather than hardcoding a path — this box has it on G:.
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"

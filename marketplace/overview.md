@@ -37,4 +37,4 @@ After install: **View → Other Windows → XoCrazy - Live Colors**.
 
 ## Feedback
 
-Issues and suggestions: see the repository linked under **More Info**.
+Issues and suggestions: <https://github.com/xaimaran/XoCrazy/issues>
