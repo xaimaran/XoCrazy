@@ -50,15 +50,18 @@ Visual Studio itself refuses to persist.
 ## Install
 
 Grab it from the Visual Studio Marketplace, or download the `.vsix` from
-[Releases](https://github.com/) and double-click it.
+[Releases](https://github.com/xaimaran/XoCrazy/releases) and double-click it.
 
 Works with **Visual Studio 2022** and **2026**, Community and up.
 
-Then open it:
+Then open it from the editor:
 
-> **View → Other Windows → XoCrazy — Live Colors**
+> **Right-click anywhere in a code file → Open XoCrazy**
 >
-> or **Tools → XoCrazy — Live Colors**
+> or press <kbd>Ctrl</kbd>+<kbd>K</kbd>, <kbd>Ctrl</kbd>+<kbd>;</kbd>, which opens the window on
+> whatever the caret is sitting on.
+
+The editor context menu is the way in. The window does not appear under **View → Other Windows**.
 
 ## Build it yourself
 

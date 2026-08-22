@@ -6,7 +6,7 @@
          of it, with two tool windows and two appliers fighting over the same format maps. -->
     <Identity Id="ThemeForge.7d3f1a20-9c44-4e7b-9f1e-2b6a8c5d3e01" Version="1.1.0" Language="en-US" Publisher="Xaimaran" />
     <DisplayName>XoCrazy</DisplayName>
-    <Description xml:space="preserve">Live editor color editing for Visual Studio. Pick a color and the editor repaints instantly - no OK button, no 400-item list, no "Default" placeholders. Put the caret on a token and XoCrazy tells you which classification actually paints it. Other theme extensions ship you someone else's theme; XoCrazy hands the colors to you. View &gt; Other Windows &gt; XoCrazy - Live Colors.</Description>
+    <Description xml:space="preserve">Live editor color editing for Visual Studio. Pick a color and the editor repaints instantly - no OK button, no 400-item list, no "Default" placeholders. Put the caret on a token and XoCrazy tells you which classification actually paints it. Other theme extensions ship you someone else's theme; XoCrazy hands the colors to you. Right-click in the editor and choose Open XoCrazy, or press Ctrl+K, Ctrl+;.</Description>
     <MoreInfo>https://github.com/xaimaran/XoCrazy</MoreInfo>
     <Icon>assets\images\favicon-96x96.png</Icon>
     <PreviewImage>assets\images\favicon-96x96.png</PreviewImage>

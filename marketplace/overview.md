@@ -23,7 +23,8 @@ theme and asks you to live in it. XoCrazy ships no theme at all — it hands the
 
 Requires Visual Studio 2022 or later (17.0+), 64-bit, with the core editor workload.
 
-After install: **View → Other Windows → XoCrazy - Live Colors**.
+After install, open it from the editor: **right-click in a code file → Open XoCrazy**, or press
+<kbd>Ctrl</kbd>+<kbd>K</kbd>, <kbd>Ctrl</kbd>+<kbd>;</kbd> to open it on the token under the caret.
 
 ## Screenshots
 

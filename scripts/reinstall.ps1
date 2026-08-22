@@ -63,4 +63,4 @@ Write-Host "Installing $VsixPath ..." -ForegroundColor Cyan
 $install = Start-Process -FilePath $vsixExe -ArgumentList "/q", "`"$VsixPath`"" -Wait -PassThru
 if ($install.ExitCode -ne 0) { throw "Install returned $($install.ExitCode)." }
 
-Write-Host "Done. Start Visual Studio, then View > Other Windows > XoCrazy - Live Colors." -ForegroundColor Green
+Write-Host "Done. Start Visual Studio, open a code file, then right-click > Open XoCrazy." -ForegroundColor Green
