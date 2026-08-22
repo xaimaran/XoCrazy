@@ -6,6 +6,8 @@
 
 <p align="center"><b>Recolour Visual Studio while you watch.</b></p>
 
+<img width="1404" height="1283" alt="image" src="https://github.com/user-attachments/assets/f450e7ef-df1d-426b-acdd-018d4483d1f5" />
+
 <p align="center">
 Pick a colour. The editor repaints as you drag.<br/>
 No OK button. No 400-row list. No "Default" where a colour should be.
