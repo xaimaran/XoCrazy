@@ -46,6 +46,22 @@ namespace XoCrazy.Core
         public bool BackgroundInherited;
         public bool Bold;
 
+        /// <summary>
+        /// The user asked for this channel to be painted with nothing at all.
+        ///
+        /// This is not the same thing as <see cref="BackgroundInherited"/>, and conflating the
+        /// two is why the picker's Clear button did nothing. Inherited is the state of a channel
+        /// nobody has claimed — a palette slot set to None emits it for every item it does not
+        /// own — and the correct response to it is to leave the editor alone, because the colour
+        /// there belongs to Visual Studio. Cleared is an instruction, and it applies to exactly
+        /// the colour inherited means to protect: the one XoCrazy never painted.
+        ///
+        /// Both flags travel together — a cleared channel is also inherited, since there is no
+        /// RGB behind it — but only this one lets the bridge tell an instruction from a default.
+        /// </summary>
+        public bool ForegroundCleared;
+        public bool BackgroundCleared;
+
         public ItemColors Clone()
         {
             return new ItemColors
@@ -54,6 +70,8 @@ namespace XoCrazy.Core
                 BackgroundRgb = BackgroundRgb,
                 ForegroundInherited = ForegroundInherited,
                 BackgroundInherited = BackgroundInherited,
+                ForegroundCleared = ForegroundCleared,
+                BackgroundCleared = BackgroundCleared,
                 Bold = Bold
             };
         }
@@ -65,6 +83,8 @@ namespace XoCrazy.Core
                 && other.BackgroundRgb == BackgroundRgb
                 && other.ForegroundInherited == ForegroundInherited
                 && other.BackgroundInherited == BackgroundInherited
+                && other.ForegroundCleared == ForegroundCleared
+                && other.BackgroundCleared == BackgroundCleared
                 && other.Bold == Bold;
         }
     }

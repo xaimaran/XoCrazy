@@ -86,6 +86,7 @@
     <Compile Include="Core\Json.cs" />
     <Compile Include="Core\LiveApplyQueue.cs" />
     <Compile Include="Core\PresetSelection.cs" />
+    <Compile Include="Core\PristineStore.cs" />
     <Compile Include="Core\Snapshot.cs" />
     <Compile Include="Core\SurfaceCatalog.cs" />
     <Compile Include="Core\ThemeApplier.cs" />

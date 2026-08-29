@@ -37,9 +37,12 @@ namespace XoCrazy.UI
             Picker.ColorChanged += OnPickerColorChanged;
             Picker.ColorCommitted += OnPickerColorCommitted;
 
-            // Transparent and Inherit are the same operation on the same channel: both mean
-            // "write no brush". Wiring them to one handler keeps them from drifting apart.
-            Picker.TransparentRequested += (s, e) => Inherit_Click(s, new RoutedEventArgs());
+            // Transparent and Inherit are NOT the same operation, which is what wiring them to
+            // one handler assumed. Inherit restores the colour Visual Studio had on the channel;
+            // Clear removes it. From an untouched item — the common case, since a Foreground
+            // palette writes no backgrounds — inherit is a no-op by design, so Clear routed
+            // through it did nothing at all.
+            Picker.TransparentRequested += Transparent_Click;
         }
 
         /// <summary>
@@ -297,6 +300,28 @@ namespace XoCrazy.UI
         }
 
         private void Inherit_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selected == null) return;
+
+            if (ForegroundTarget.IsChecked.GetValueOrDefault())
+                _selected.InheritForeground();
+            else
+                _selected.InheritBackground();
+
+            _session.FlushNow();
+            _session.CloseHistoryGroup();
+            SyncPickerToSelection();
+            UpdateContrastLabel();
+            UpdateDirtyLabel();
+            UpdateHistoryButtons();
+        }
+
+        /// <summary>
+        /// The picker's Clear button: paint this channel with nothing, whoever put the colour
+        /// there. Unlike Inherit it works on channels XoCrazy never touched, which is the only
+        /// case where the user has any reason to press it.
+        /// </summary>
+        private void Transparent_Click(object sender, EventArgs e)
         {
             if (_selected == null) return;
 

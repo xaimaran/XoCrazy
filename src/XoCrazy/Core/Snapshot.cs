@@ -24,6 +24,15 @@ namespace XoCrazy.Core
             public string Foreground; // null = inherit from theme
             public string Background;
             public bool Bold;
+
+            /// <summary>
+            /// The channel is painted with nothing, deliberately. A null colour alone cannot
+            /// carry this: null is also what every unclaimed channel serialises as, and those
+            /// have to be left to Visual Studio. Without the distinction on disk a cleared
+            /// channel came back painted at the next start, because nothing re-asserted it.
+            /// </summary>
+            public bool ForegroundCleared;
+            public bool BackgroundCleared;
         }
 
         public static string Serialize(string name, IEnumerable<ItemViewModel> items)
@@ -42,6 +51,8 @@ namespace XoCrazy.Core
                     Item = item.StorageName,
                     Foreground = item.Colors.ForegroundInherited ? null : ColorMath.ToHex(item.Colors.ForegroundRgb),
                     Background = item.Colors.BackgroundInherited ? null : ColorMath.ToHex(item.Colors.BackgroundRgb),
+                    ForegroundCleared = item.Colors.ForegroundCleared,
+                    BackgroundCleared = item.Colors.BackgroundCleared,
                     Bold = item.Colors.Bold
                 };
             }
@@ -66,6 +77,8 @@ namespace XoCrazy.Core
                 w.Prop("item", record.Item);
                 w.Prop("fg", record.Foreground);
                 w.Prop("bg", record.Background);
+                if (record.ForegroundCleared) w.Prop("fgClear", true);
+                if (record.BackgroundCleared) w.Prop("bgClear", true);
                 w.Prop("bold", record.Bold);
                 w.EndObject();
             }
@@ -100,6 +113,8 @@ namespace XoCrazy.Core
                     Item = itemName,
                     Foreground = node["fg"] != null ? node["fg"].AsString() : null,
                     Background = node["bg"] != null ? node["bg"].AsString() : null,
+                    ForegroundCleared = node["fgClear"] != null && node["fgClear"].AsBool(false),
+                    BackgroundCleared = node["bgClear"] != null && node["bgClear"].AsBool(false),
                     Bold = node["bold"] != null && node["bold"].AsBool(false)
                 });
             }
@@ -125,21 +140,25 @@ namespace XoCrazy.Core
             if (record.Foreground == null)
             {
                 result.ForegroundInherited = true;
+                result.ForegroundCleared = record.ForegroundCleared;
             }
             else if (ColorMath.TryParseHex(record.Foreground, out rgb))
             {
                 result.ForegroundRgb = rgb;
                 result.ForegroundInherited = false;
+                result.ForegroundCleared = false;
             }
 
             if (record.Background == null)
             {
                 result.BackgroundInherited = true;
+                result.BackgroundCleared = record.BackgroundCleared;
             }
             else if (ColorMath.TryParseHex(record.Background, out rgb))
             {
                 result.BackgroundRgb = rgb;
                 result.BackgroundInherited = false;
+                result.BackgroundCleared = false;
             }
 
             result.Bold = record.Bold;

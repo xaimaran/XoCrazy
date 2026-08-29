@@ -68,7 +68,22 @@ namespace XoCrazy.Core
                 if (path != null)
                 {
                     foreach (var record in Snapshot.Deserialize(File.ReadAllText(path)))
+                    {
+                        // Themes saved before "Plain Text" was recognised as a covering layer
+                        // carry a background for it, and ThemeApplier re-asserts that at every
+                        // start — so the selection stays hidden until the user happens to apply
+                        // a palette again. Dropping the channel on load repairs it once, on the
+                        // next start, without touching anything else the theme says.
+                        if (string.Equals(record.Item, "Plain Text", StringComparison.OrdinalIgnoreCase)
+                            && record.Background != null)
+                        {
+                            Diag.Log("ThemeStore: dropping the stored 'Plain Text' background ("
+                                     + record.Background + "); it paints over the selection.");
+                            record.Background = null;
+                        }
+
                         _records[Key(record.Category, record.Item)] = record;
+                    }
                     Diag.Log("ThemeStore loaded " + _records.Count + " override(s) from " + path);
                 }
                 else
@@ -128,6 +143,36 @@ namespace XoCrazy.Core
             return Records().Values;
         }
 
+        /// <summary>
+        /// True when a colour sitting in the editor's format map for <paramref name="item"/> is
+        /// one we wrote in an earlier session rather than the theme's own.
+        ///
+        /// This is what stops <see cref="PristineStore"/> from adopting our own colour as the
+        /// baseline on installs that were already running before it existed: storage writes are
+        /// persistent, so the map a fresh process starts with can already be holding our value,
+        /// and the only thing that can tell the two apart is the record of what we wrote.
+        ///
+        /// Matched on the item name alone. The category is not part of the question — the
+        /// format maps are not keyed by it, and the editor category is the only one written.
+        /// </summary>
+        public static bool WroteChannel(string item, bool isForeground, uint rgb)
+        {
+            if (string.IsNullOrEmpty(item))
+                return false;
+
+            var hex = ColorMath.ToHex(rgb);
+            foreach (var record in Records().Values)
+            {
+                if (!string.Equals(record.Item, item, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var stored = isForeground ? record.Foreground : record.Background;
+                if (string.Equals(stored, hex, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
         public static int Count { get { return Records().Count; } }
 
         /// <summary>Records one applied edit. Does not write to disk — call <see cref="Save"/>.</summary>
@@ -141,18 +186,34 @@ namespace XoCrazy.Core
                 Item = item.StorageName,
                 Foreground = item.Colors.ForegroundInherited ? null : ColorMath.ToHex(item.Colors.ForegroundRgb),
                 Background = item.Colors.BackgroundInherited ? null : ColorMath.ToHex(item.Colors.BackgroundRgb),
+                ForegroundCleared = item.Colors.ForegroundCleared,
+                BackgroundCleared = item.Colors.BackgroundCleared,
                 Bold = item.Colors.Bold
             };
 
             // Fully inherited and not bold means "the user handed it all back to the theme".
             // Keeping such a row would re-assert the theme default on every start, which is
             // harmless until the user switches themes and wonders why the old one bleeds in.
-            if (record.Foreground == null && record.Background == null && !record.Bold)
+            //
+            // A cleared channel is not that. It is an instruction that has to be re-asserted on
+            // every start, because the map the editor rebuilds at startup does not know about it
+            // — drop the row and the colour is back after a restart.
+            if (Empty(record))
                 Records().Remove(Key(record.Category, record.Item));
             else
                 Records()[Key(record.Category, record.Item)] = record;
 
             _dirty = true;
+        }
+
+        /// <summary>True when a record says nothing worth re-asserting at the next start.</summary>
+        private static bool Empty(Snapshot.Record record)
+        {
+            return record.Foreground == null
+                && record.Background == null
+                && !record.ForegroundCleared
+                && !record.BackgroundCleared
+                && !record.Bold;
         }
 
         /// <summary>Upserts a batch — a preset or an import — without touching anything else.</summary>
@@ -164,7 +225,7 @@ namespace XoCrazy.Core
                 if (record == null || string.IsNullOrEmpty(record.Item))
                     continue;
 
-                if (record.Foreground == null && record.Background == null && !record.Bold)
+                if (Empty(record))
                     map.Remove(Key(record.Category, record.Item));
                 else
                     map[Key(record.Category, record.Item)] = record;
@@ -209,7 +270,7 @@ namespace XoCrazy.Core
             map.Clear();
             foreach (var record in records)
             {
-                if (record.Foreground == null && record.Background == null && !record.Bold)
+                if (Empty(record))
                     continue;
                 map[Key(record.Category, record.Item)] = record;
             }

@@ -12,122 +12,142 @@ using Task = System.Threading.Tasks.Task;
 
 namespace XoCrazy
 {
-    [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
-    [InstalledProductRegistration("#110", "#112", "1.1.0")]
-    [ProvideMenuResource("Menus.ctmenu", 1)]
-    [ProvideToolWindow(typeof(XoCrazyToolWindow), Style = VsDockStyle.Tabbed, Window = ToolWindowGuids.SolutionExplorer)]
-    // Force the package to load at startup regardless of whether any command is invoked.
-    // Without this the shell only loads on first command invocation — and if no command is
-    // reachable, the package never runs and cannot report why.
-    [ProvideAutoLoad(VSConstants.UICONTEXT.NoSolution_string, PackageAutoLoadFlags.BackgroundLoad)]
-    [ProvideAutoLoad(VSConstants.UICONTEXT.SolutionExists_string, PackageAutoLoadFlags.BackgroundLoad)]
-    [Guid(PackageGuids.PackageString)]
-    public sealed class XoCrazyPackage : AsyncPackage
-    {
-        private static readonly string DiagnosticLog =
-            Path.Combine(Path.GetTempPath(), "xocrazy-load.log");
+	[PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
+	[InstalledProductRegistration("#110", "#112", "1.1.1")]
+	[ProvideMenuResource("Menus.ctmenu", 1)]
+	[ProvideToolWindow(
+		typeof(XoCrazyToolWindow),
+		Style = VsDockStyle.Tabbed,
+		Window = ToolWindowGuids.SolutionExplorer)]
 
-        private static void Log(string message)
-        {
-            try
-            {
-                File.AppendAllText(DiagnosticLog,
-                    DateTime.Now.ToString("HH:mm:ss.fff") + "  " + message + Environment.NewLine);
-            }
-            catch
-            {
-                // Diagnostics must never be the reason the package fails to load.
-            }
-        }
+	// Force the package to load at startup regardless of whether any command is invoked.
+	// Without this the shell only loads on first command invocation — and if no command is
+	// reachable, the package never runs and cannot report why.
+	[ProvideAutoLoad(VSConstants.UICONTEXT.NoSolution_string, PackageAutoLoadFlags.BackgroundLoad)]
+	[ProvideAutoLoad(VSConstants.UICONTEXT.SolutionExists_string, PackageAutoLoadFlags.BackgroundLoad)]
+	[Guid(PackageGuids.PackageString)]
+	public sealed class XoCrazyPackage : AsyncPackage
+	{
+		private static readonly string DiagnosticLog = Path.Combine(Path.GetTempPath(), "xocrazy-load.log");
 
-        protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
-        {
-            Log("InitializeAsync entered; assembly=" + typeof(XoCrazyPackage).Assembly.Location);
-            try
-            {
-                await base.InitializeAsync(cancellationToken, progress);
-                await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+		private static void Log(string message)
+		{
+			try
+			{
+				File.AppendAllText(
+					DiagnosticLog,
+					DateTime.Now.ToString("HH:mm:ss.fff") + "  " + message + Environment.NewLine);
+			}
+			catch
+			{
+				// Diagnostics must never be the reason the package fails to load.
+			}
+		}
 
-                var commandService = await GetServiceAsync(typeof(IMenuCommandService)) as OleMenuCommandService;
-                if (commandService == null)
-                {
-                    Log("FAILED: IMenuCommandService unavailable — no command can be registered.");
-                    return;
-                }
+		protected override async Task InitializeAsync(
+			CancellationToken cancellationToken,
+			IProgress<ServiceProgressData> progress
+		)
+		{
+			Log("InitializeAsync entered; assembly=" + typeof(XoCrazyPackage).Assembly.Location);
 
-                commandService.AddCommand(new MenuCommand(
-                    (s, e) => OpenToolWindow(),
-                    new CommandID(PackageGuids.CommandSet, PackageGuids.CmdIdOpenToolWindow)));
+			try
+			{
+				await base.InitializeAsync(cancellationToken, progress);
+				await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
-                commandService.AddCommand(new MenuCommand(
-                    (s, e) => OpenToolWindow(),
-                    new CommandID(PackageGuids.CommandSet, PackageGuids.CmdIdOpenToolWindowTools)));
+				var commandService = await GetServiceAsync(typeof(IMenuCommandService)) as OleMenuCommandService;
 
-                commandService.AddCommand(new MenuCommand(
-                    (s, e) => TargetCaret(),
-                    new CommandID(PackageGuids.CommandSet, PackageGuids.CmdIdTargetCaret)));
+				if (commandService == null)
+				{
+					Log("FAILED: IMenuCommandService unavailable — no command can be registered.");
 
-                Log("OK: 3 commands registered on command set " + PackageGuids.CommandSet.ToString("B"));
+					return;
+				}
 
-                // Re-apply the saved theme. This is what makes edits survive a restart: the
-                // editor's format maps are rebuilt from Fonts and Colors at process start, and
-                // nothing the tool window pushed last session is in them.
-                ThemeApplier.Start(this);
-            }
-            catch (Exception ex)
-            {
-                Log("EXCEPTION: " + ex);
-                throw;
-            }
-        }
+				commandService.AddCommand(
+					new MenuCommand(
+						(s, e) => OpenToolWindow(),
+						new CommandID(PackageGuids.CommandSet, PackageGuids.CmdIdOpenToolWindow)));
 
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-                ThemeApplier.Shutdown();
-            base.Dispose(disposing);
-        }
+				commandService.AddCommand(
+					new MenuCommand(
+						(s, e) => OpenToolWindow(),
+						new CommandID(PackageGuids.CommandSet, PackageGuids.CmdIdOpenToolWindowTools)));
 
-        private XoCrazyToolWindow OpenToolWindow()
-        {
-            ThreadHelper.ThrowIfNotOnUIThread();
+				commandService.AddCommand(
+					new MenuCommand(
+						(s, e) => TargetCaret(),
+						new CommandID(PackageGuids.CommandSet, PackageGuids.CmdIdTargetCaret)));
 
-            var window = FindToolWindow(typeof(XoCrazyToolWindow), 0, create: true) as XoCrazyToolWindow;
-            if (window == null || window.Frame == null)
-                return null;
+				Log("OK: 3 commands registered on command set " + PackageGuids.CommandSet.ToString("B"));
 
-            var frame = (IVsWindowFrame)window.Frame;
-            Microsoft.VisualStudio.ErrorHandler.ThrowOnFailure(frame.Show());
-            return window;
-        }
+				// Re-apply the saved theme. This is what makes edits survive a restart: the
+				// editor's format maps are rebuilt from Fonts and Colors at process start, and
+				// nothing the tool window pushed last session is in them.
+				ThemeApplier.Start(this);
+			}
+			catch (Exception ex)
+			{
+				Log("EXCEPTION: " + ex);
 
-        /// <summary>
-        /// Reads the classification under the caret and points the window at it.
-        ///
-        /// The order matters: resolve the classification from the code window *first*, because
-        /// showing the tool window moves focus and the "active view" stops being the editor.
-        /// </summary>
-        private void TargetCaret()
-        {
-            ThreadHelper.ThrowIfNotOnUIThread();
+				throw;
+			}
+		}
 
-            var storageName = CaretTargeting.ClassificationAtCaret(ServiceProvider.GlobalProvider);
+		protected override void Dispose(bool disposing)
+		{
+			if (disposing)
+				ThemeApplier.Shutdown();
 
-            var window = OpenToolWindow();
-            if (window == null)
-                return;
+			base.Dispose(disposing);
+		}
 
-            // No classification under the caret is not an error worth a modal for. The command
-            // is "open XoCrazy, on this colour if there is one" — the window is already up by
-            // this point, which is the whole of what the user asked for. A dialog here made the
-            // common case (caret on whitespace) feel like a failure and cost a click to dismiss.
-            if (storageName == null)
-            {
-                Diag.Log("TargetCaret: no classification under the caret; opened the window only.");
-                return;
-            }
+		private XoCrazyToolWindow OpenToolWindow()
+		{
+			ThreadHelper.ThrowIfNotOnUIThread();
 
-            window.Target(storageName);
-        }
-    }
+			var window = FindToolWindow(typeof(XoCrazyToolWindow), 0, true) as XoCrazyToolWindow;
+
+			if (window == null
+			    || window.Frame == null)
+				return null;
+
+			var frame = (IVsWindowFrame)window.Frame;
+			ErrorHandler.ThrowOnFailure(frame.Show());
+
+			return window;
+		}
+
+		/// <summary>
+		/// Reads the classification under the caret and points the window at it.
+		///
+		/// The order matters: resolve the classification from the code window *first*, because
+		/// showing the tool window moves focus and the "active view" stops being the editor.
+		/// </summary>
+		private void TargetCaret()
+		{
+			ThreadHelper.ThrowIfNotOnUIThread();
+
+			var storageName = CaretTargeting.ClassificationAtCaret(ServiceProvider.GlobalProvider);
+
+			var window = OpenToolWindow();
+
+			if (window == null)
+				return;
+
+			// No classification under the caret is not an error worth a modal for. The command
+			// is "open XoCrazy, on this colour if there is one" — the window is already up by
+			// this point, which is the whole of what the user asked for. A dialog here made the
+			// common case (caret on whitespace) feel like a failure and cost a click to dismiss.
+			if (storageName == null)
+			{
+				Diag.Log("TargetCaret: no classification under the caret; opened the window only.");
+
+				return;
+			}
+
+			window.Target(storageName);
+		}
+	}
 }

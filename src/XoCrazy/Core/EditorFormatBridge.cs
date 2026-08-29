@@ -181,40 +181,79 @@ namespace XoCrazy.Core
             if (!_byName.ContainsKey("Collapsible Text (Collapsed)"))
                 IndexClassifications();
 
-            bool classificationsBatched = false;
-            bool formatsBatched = false;
+            // Two passes, each inside its own map's batch, and never nested.
+            //
+            // The classification format map opens a batch on the underlying editor format map as
+            // part of its own — which is why asking for a second one throws "BeginBatchUpdate
+            // called twice". Writing format-definition keys while that borrowed batch is open
+            // means the classification map closes it, and the FormatMappingChanged that carries
+            // those keys is raised as part of *its* commit. The consumers that redraw from a
+            // format definition directly — the selection layer above all, which reads
+            // 'Selected Text' out of the map and caches the brush until it hears otherwise —
+            // do not see it, so the new selection colour was written correctly, verified
+            // correctly, and only appeared after a restart rebuilt the maps from storage.
+            //
+            // Splitting the passes lets the editor format map open, and more importantly close,
+            // its own batch, which is what raises the event those consumers listen to.
+            var formatItems = new List<ItemViewModel>();
+            var classificationItems = new List<ItemViewModel>();
+            foreach (var item in batch)
+            {
+                if (RoutesToFormatMap(item))
+                    formatItems.Add(item);
+                else
+                    classificationItems.Add(item);
+            }
 
+            failed += ApplyPass(formatItems, _formats.BeginBatchUpdate, _formats.EndBatchUpdate, "format");
+            failed += ApplyPass(classificationItems,
+                                _classifications.BeginBatchUpdate, _classifications.EndBatchUpdate,
+                                "classification");
+
+            // Written here rather than per channel: the baselines this batch captured are worth
+            // nothing if the process ends before they reach disk, and the batch is the natural
+            // boundary — one file write per apply, not one per item.
+            PristineStore.Save();
+            return failed;
+        }
+
+        /// <summary>
+        /// Which map an item's write will land in. Mirrors <see cref="ApplyOne"/> — the two must
+        /// agree, or an item is batched on one map and written to the other, which is the
+        /// situation the split exists to prevent.
+        /// </summary>
+        private bool RoutesToFormatMap(ItemViewModel item)
+        {
+            if (item.IsSurface)
+                return true;
+
+            try { return _types.GetClassificationType(item.StorageName) == null; }
+            catch { return true; }
+        }
+
+        /// <summary>Applies one map's worth of items inside that map's own batch.</summary>
+        private int ApplyPass(List<ItemViewModel> items, Action begin, Action end, string label)
+        {
+            if (items.Count == 0)
+                return 0;
+
+            bool batched = false;
             try
             {
-                _classifications.BeginBatchUpdate();
-                classificationsBatched = true;
+                begin();
+                batched = true;
             }
             catch (Exception ex)
             {
-                Diag.Log("  bridge classification BeginBatchUpdate failed (" + ex.Message + "); unbatched");
+                // Batching is an optimisation, not a requirement: apply unbatched rather than
+                // lose the flush.
+                Diag.Log("  bridge " + label + " BeginBatchUpdate failed (" + ex.Message + "); unbatched");
             }
 
-            // Only when the classification map is not already batched. The classification
-            // format map opens a batch on the underlying editor format map as part of its own,
-            // so asking for a second one throws "BeginBatchUpdate called twice" — which is
-            // exactly what the log showed on every flush, including the first of a session.
-            // Nothing was leaking a batch; the two calls were the same batch.
-            if (!classificationsBatched)
-            {
-                try
-                {
-                    _formats.BeginBatchUpdate();
-                    formatsBatched = true;
-                }
-                catch (Exception ex)
-                {
-                    Diag.Log("  bridge format BeginBatchUpdate failed (" + ex.Message + "); unbatched");
-                }
-            }
-
+            int failed = 0;
             try
             {
-                foreach (var item in batch)
+                foreach (var item in items)
                 {
                     if (!ApplyOne(item))
                         failed++;
@@ -222,10 +261,9 @@ namespace XoCrazy.Core
             }
             finally
             {
-                if (formatsBatched)
-                    try { _formats.EndBatchUpdate(); } catch (Exception ex) { Diag.Log("  bridge format EndBatchUpdate failed: " + ex.Message); }
-                if (classificationsBatched)
-                    try { _classifications.EndBatchUpdate(); } catch (Exception ex) { Diag.Log("  bridge classification EndBatchUpdate failed: " + ex.Message); }
+                if (batched)
+                    try { end(); }
+                    catch (Exception ex) { Diag.Log("  bridge " + label + " EndBatchUpdate failed: " + ex.Message); }
             }
             return failed;
         }
@@ -691,32 +729,51 @@ namespace XoCrazy.Core
             // nowhere else once we have overwritten it, so it has to be kept.
             var pristine = PristineRun(type, props);
 
-            if (colors.ForegroundInherited)
+            string name = type.Classification;
+
+            if (colors.ForegroundCleared)
             {
-                if (_painted.Remove(fgOwned))
+                // No ownership test, for the reason given in SetChannel. On a run, "painted with
+                // nothing" is what ClearForegroundBrush means, so the channel falls through to
+                // whatever sits below it instead of to a colour we chose.
+                CaptureRunBaseline(pristine, name, PristineStore.Foreground);
+                props = props.ClearForegroundBrush();
+                _painted.Remove(fgOwned);
+            }
+            else if (colors.ForegroundInherited)
+            {
+                // Ownership survives the restart through the baseline, for the reason given in
+                // SetChannel: a run painted last session is still ours to hand back.
+                if (_painted.Remove(fgOwned) || PristineStore.Has(name, PristineStore.Foreground))
                 {
-                    props = pristine.ForegroundBrushEmpty
-                        ? props.ClearForegroundBrush()
-                        : props.SetForegroundBrush(pristine.ForegroundBrush);
+                    _painted.Remove(fgOwned);
+                    props = RestoreRun(props, pristine, name, PristineStore.Foreground);
                 }
             }
             else
             {
+                CaptureRunBaseline(pristine, name, PristineStore.Foreground);
                 props = props.SetForeground(ColorMath.ToWpf(colors.ForegroundRgb));
                 _painted.Add(fgOwned);
             }
 
-            if (colors.BackgroundInherited)
+            if (colors.BackgroundCleared)
             {
-                if (_painted.Remove(bgOwned))
+                CaptureRunBaseline(pristine, name, PristineStore.Background);
+                props = props.ClearBackgroundBrush();
+                _painted.Remove(bgOwned);
+            }
+            else if (colors.BackgroundInherited)
+            {
+                if (_painted.Remove(bgOwned) || PristineStore.Has(name, PristineStore.Background))
                 {
-                    props = pristine.BackgroundBrushEmpty
-                        ? props.ClearBackgroundBrush()
-                        : props.SetBackgroundBrush(pristine.BackgroundBrush);
+                    _painted.Remove(bgOwned);
+                    props = RestoreRun(props, pristine, name, PristineStore.Background);
                 }
             }
             else
             {
+                CaptureRunBaseline(pristine, name, PristineStore.Background);
                 props = props.SetBackground(ColorMath.ToWpf(colors.BackgroundRgb));
                 _painted.Add(bgOwned);
             }
@@ -724,6 +781,61 @@ namespace XoCrazy.Core
             props = props.SetBold(colors.Bold);
 
             _classifications.SetTextProperties(type, props);
+        }
+
+        /// <summary>The run equivalent of <see cref="CaptureBaseline"/>.</summary>
+        private static void CaptureRunBaseline(
+            TextFormattingRunProperties pristine, string name, string channel)
+        {
+            if (PristineStore.Has(name, channel))
+                return;
+
+            bool foreground = channel == PristineStore.Foreground;
+            bool empty = pristine == null
+                || (foreground ? pristine.ForegroundBrushEmpty : pristine.BackgroundBrushEmpty);
+
+            uint rgb = 0;
+            bool set = false;
+            if (!empty)
+            {
+                var brush = foreground ? pristine.ForegroundBrush : pristine.BackgroundBrush;
+                var solid = brush as System.Windows.Media.SolidColorBrush;
+                if (solid != null)
+                {
+                    rgb = ColorMath.ToColorRef(solid.Color);
+                    set = !ThemeStore.WroteChannel(name, foreground, rgb);
+                }
+            }
+
+            PristineStore.Capture(name, channel, set, rgb);
+        }
+
+        /// <summary>The run equivalent of <see cref="RestoreChannel"/>.</summary>
+        private static TextFormattingRunProperties RestoreRun(
+            TextFormattingRunProperties props, TextFormattingRunProperties pristine,
+            string name, string channel)
+        {
+            bool foreground = channel == PristineStore.Foreground;
+
+            bool wasSet;
+            uint rgb;
+            if (!PristineStore.TryGet(name, channel, out wasSet, out rgb))
+            {
+                bool empty = foreground ? pristine.ForegroundBrushEmpty : pristine.BackgroundBrushEmpty;
+                if (empty)
+                    return foreground ? props.ClearForegroundBrush() : props.ClearBackgroundBrush();
+
+                return foreground
+                    ? props.SetForegroundBrush(pristine.ForegroundBrush)
+                    : props.SetBackgroundBrush(pristine.BackgroundBrush);
+            }
+
+            if (!wasSet)
+                return foreground ? props.ClearForegroundBrush() : props.ClearBackgroundBrush();
+
+            var brush = new System.Windows.Media.SolidColorBrush(ColorMath.ToWpf(rgb));
+            brush.Freeze();
+            return foreground ? props.SetForegroundBrush(brush) : props.SetBackgroundBrush(brush);
         }
 
         /// <summary>
@@ -742,6 +854,8 @@ namespace XoCrazy.Core
             {
                 "Indicator Margin",
                 "TextView Background",
+                "Plain Text",
+                "Selected Text",
                 "Collapsible Text (Collapsed)",
                 "outlining.chevron.collapsed",
 
@@ -764,12 +878,14 @@ namespace XoCrazy.Core
                 EditorFormatDefinition.ForegroundColorId,
                 EditorFormatDefinition.ForegroundBrushId,
                 colors.ForegroundInherited,
+                colors.ForegroundCleared,
                 colors.ForegroundRgb);
 
             SetChannel(props, pristine, key, "bg",
                 EditorFormatDefinition.BackgroundColorId,
                 EditorFormatDefinition.BackgroundBrushId,
                 colors.BackgroundInherited,
+                colors.BackgroundCleared,
                 colors.BackgroundRgb);
 
             _formats.SetProperties(key, props);
@@ -874,22 +990,42 @@ namespace XoCrazy.Core
         /// </summary>
         private void SetChannel(
             ResourceDictionary props, ResourceDictionary pristine, string key, string channel,
-            string colorId, string brushId, bool inherited, uint rgb)
+            string colorId, string brushId, bool inherited, bool cleared, uint rgb)
         {
             string owned = key + "/" + channel;
+
+            if (cleared)
+            {
+                // An instruction, not a default, so no ownership test: the whole point is to
+                // remove a colour XoCrazy did not put there. Both keys go, because a format
+                // definition with neither is the only thing the editor treats as unpainted —
+                // see the SetChannel remarks on why writing one without the other is not it.
+                CaptureBaseline(pristine, key, channel, colorId, brushId);
+                props.Remove(brushId);
+                props.Remove(colorId);
+                _painted.Remove(owned);
+                return;
+            }
 
             if (inherited)
             {
                 // Not ours, so leave it exactly as it is. This is the guard that keeps a
                 // Foreground-only change from reaching the page background.
-                if (!_painted.Contains(owned))
+                //
+                // A persisted baseline counts as ownership too: it is only ever written when we
+                // paint, and it is the half of the answer that survives a restart. Without it a
+                // background applied last session could not be cleared this session — the set
+                // was empty, so Clear returned here having done nothing, which is half of the
+                // transparent-does-nothing bug.
+                if (!_painted.Contains(owned) && !PristineStore.Has(key, channel))
                     return;
 
-                RestoreEntry(props, pristine, brushId);
-                RestoreEntry(props, pristine, colorId);
+                RestoreChannel(props, pristine, key, channel, colorId, brushId);
                 _painted.Remove(owned);
                 return;
             }
+
+            CaptureBaseline(pristine, key, channel, colorId, brushId);
 
             var color = ColorMath.ToWpf(rgb);
 
@@ -909,6 +1045,60 @@ namespace XoCrazy.Core
                 props[id] = pristine[id];
             else
                 props.Remove(id);
+        }
+
+        /// <summary>
+        /// Records what this channel held before we painted it, for the one process that gets to
+        /// see the honest answer. See <see cref="PristineStore"/> for why the in-process
+        /// snapshot is not enough on its own.
+        /// </summary>
+        private static void CaptureBaseline(
+            ResourceDictionary pristine, string key, string channel, string colorId, string brushId)
+        {
+            if (PristineStore.Has(key, channel))
+                return;
+
+            uint rgb = 0;
+            bool set = pristine != null && TryReadChannel(pristine, colorId, brushId, out rgb);
+            if (set && ThemeStore.WroteChannel(key, channel == PristineStore.Foreground, rgb))
+                set = false;   // our own colour from an earlier session, not the theme's
+
+            PristineStore.Capture(key, channel, set, rgb);
+        }
+
+        /// <summary>
+        /// Puts a channel back the way Visual Studio had it. The persisted baseline wins over
+        /// the in-process snapshot, which is only trustworthy in the process that took it.
+        ///
+        /// A baseline of "unpainted" is restored by removing both keys, and that is deliberate:
+        /// it is what makes the picker's Clear button produce a genuinely transparent channel
+        /// instead of writing some colour back.
+        /// </summary>
+        private static void RestoreChannel(
+            ResourceDictionary props, ResourceDictionary pristine, string key, string channel,
+            string colorId, string brushId)
+        {
+            bool wasSet;
+            uint rgb;
+            if (!PristineStore.TryGet(key, channel, out wasSet, out rgb))
+            {
+                RestoreEntry(props, pristine, brushId);
+                RestoreEntry(props, pristine, colorId);
+                return;
+            }
+
+            if (!wasSet)
+            {
+                props.Remove(brushId);
+                props.Remove(colorId);
+                return;
+            }
+
+            var color = ColorMath.ToWpf(rgb);
+            var brush = new System.Windows.Media.SolidColorBrush(color);
+            brush.Freeze();
+            props[brushId] = brush;
+            props[colorId] = color;
         }
     }
 }

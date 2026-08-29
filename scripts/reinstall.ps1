@@ -17,9 +17,14 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $ExtensionId = 'ThemeForge.7d3f1a20-9c44-4e7b-9f1e-2b6a8c5d3e01'
+
+# The Id the extension shipped under before the rename. VSIXInstaller matches on Id alone, so a
+# copy installed under the old one is, as far as it is concerned, a different extension: it stays
+# installed, it still loads, and two builds of this then fight over the same editor format maps.
+# Uninstalling both Ids is what makes the rename a rename rather than a second install.
+$LegacyExtensionIds = @('ThemeForge.7d3f1a20-9c44-4e7b-9f1e-2b6a8c5d3e01')
+
 $RepoRoot    = Split-Path -Parent $PSScriptRoot
-# The project was renamed ThemeForge -> XoCrazy; the Identity Id above deliberately was not.
-# Changing it would make the next install a second extension beside the old one.
 $Project     = Join-Path $RepoRoot 'src\XoCrazy\XoCrazy.csproj'
 $VsixPath    = Join-Path $RepoRoot "src\XoCrazy\bin\$Configuration\XoCrazy.vsix"
 
@@ -44,11 +49,14 @@ if (-not $KeepVsOpen) {
     Get-Process devenv -ErrorAction SilentlyContinue | Stop-Process -Force
 }
 
-Write-Host "Uninstalling $ExtensionId ..." -ForegroundColor Cyan
-# Exit code 1002 means "not installed", which is a fine starting state.
-$uninstall = Start-Process -FilePath $vsixExe -ArgumentList "/q", "/u:$ExtensionId" -Wait -PassThru
-if ($uninstall.ExitCode -notin @(0, 1002)) {
-    Write-Warning "Uninstall returned $($uninstall.ExitCode); continuing anyway."
+foreach ($id in @($ExtensionId) + $LegacyExtensionIds) {
+    Write-Host "Uninstalling $id ..." -ForegroundColor Cyan
+    # Exit code 1002 means "not installed", which is a fine starting state — and the expected
+    # one for the legacy Ids on every run after the first.
+    $uninstall = Start-Process -FilePath $vsixExe -ArgumentList "/q", "/u:$id" -Wait -PassThru
+    if ($uninstall.ExitCode -notin @(0, 1002)) {
+        Write-Warning "Uninstall of $id returned $($uninstall.ExitCode); continuing anyway."
+    }
 }
 
 if (-not $SkipBuild) {

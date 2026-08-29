@@ -551,7 +551,8 @@ namespace XoCrazy.Core
             ThreadHelper.ThrowIfNotOnUIThread();
 
             var records = ThemePreset.Compose(FontColorCategories.TextEditor,
-                                              foreground, textArea, editor, Surfaces());
+                                              foreground, textArea, editor, Surfaces(),
+                                              ColorMath.ToHex(_cachedEditorBackground));
 
             ThemeStore.RecordRange(records);
             ThemeStore.Save();
@@ -574,7 +575,8 @@ namespace XoCrazy.Core
             ThreadHelper.ThrowIfNotOnUIThread();
 
             var records = ThemePreset.Compose(FontColorCategories.TextEditor,
-                                              foreground, textArea, editor, Surfaces());
+                                              foreground, textArea, editor, Surfaces(),
+                                              ColorMath.ToHex(_cachedEditorBackground));
             PreviewStates(StatesFor(records), "preview selection");
         }
 
@@ -798,6 +800,12 @@ namespace XoCrazy.Core
 
             ThemeStore.Clear();
             PresetSelection.Clear();
+
+            // After the bridge has used them, not before: the batch above restores every item
+            // from these baselines, and dropping them first would leave it nothing to restore.
+            // Once the maps are Visual Studio's again the old baselines describe nothing, and
+            // keeping them would make the next paint restore a colour from two themes ago.
+            PristineStore.Clear();
 
             // Rebuild the shell's cache from the theme. Without this the Fonts and Colors page
             // keeps showing the old values until the next restart even though the editor has

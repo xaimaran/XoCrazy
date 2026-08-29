@@ -122,6 +122,7 @@ namespace XoCrazy.Core
         {
             Colors.ForegroundRgb = rgb;
             Colors.ForegroundInherited = false;
+            Colors.ForegroundCleared = false;
             RaiseAll();
             if (Changed != null) Changed(this, EventArgs.Empty);
         }
@@ -130,13 +131,40 @@ namespace XoCrazy.Core
         {
             Colors.BackgroundRgb = rgb;
             Colors.BackgroundInherited = false;
+            Colors.BackgroundCleared = false;
             RaiseAll();
             if (Changed != null) Changed(this, EventArgs.Empty);
         }
 
+        /// <summary>Hands the channel back to the theme: Visual Studio's colour returns.</summary>
+        public void InheritForeground()
+        {
+            Colors.ForegroundInherited = true;
+            Colors.ForegroundCleared = false;
+            RaiseAll();
+            if (Changed != null) Changed(this, EventArgs.Empty);
+        }
+
+        public void InheritBackground()
+        {
+            Colors.BackgroundInherited = true;
+            Colors.BackgroundCleared = false;
+            RaiseAll();
+            if (Changed != null) Changed(this, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Paints the channel with nothing, so whatever is behind shows through.
+        ///
+        /// Separate from <see cref="InheritBackground"/> because the two ask for opposite things
+        /// from the same starting state: inherit restores the colour Visual Studio had there,
+        /// and that is precisely the colour clear is meant to remove. See
+        /// <see cref="ItemColors.BackgroundCleared"/>.
+        /// </summary>
         public void ClearForeground()
         {
             Colors.ForegroundInherited = true;
+            Colors.ForegroundCleared = true;
             RaiseAll();
             if (Changed != null) Changed(this, EventArgs.Empty);
         }
@@ -144,6 +172,7 @@ namespace XoCrazy.Core
         public void ClearBackground()
         {
             Colors.BackgroundInherited = true;
+            Colors.BackgroundCleared = true;
             RaiseAll();
             if (Changed != null) Changed(this, EventArgs.Empty);
         }

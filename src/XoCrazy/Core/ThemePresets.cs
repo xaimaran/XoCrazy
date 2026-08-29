@@ -189,7 +189,7 @@ namespace XoCrazy.Core
         private static readonly Dictionary<string, string> BackgroundOf =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                { "Plain Text", Background },
+                // "Plain Text" is deliberately absent — see NeverBackground.
                 { "Selected Text", Selection },
                 { "Inactive Selected Text", Selection },
 
@@ -223,6 +223,28 @@ namespace XoCrazy.Core
             {
                 "outlining.verticalrule",
                 "outlining.square",
+            };
+
+        /// <summary>
+        /// Surfaces whose background must stay unwritten because the editor draws them *over*
+        /// the selection.
+        ///
+        /// The editor paints in three passes: the view background, then the selection adornment,
+        /// then the text lines. A run with a background brush fills its own character cells in
+        /// that third pass, so an opaque "Plain Text" background covers the selection on every
+        /// cell that holds a character and leaves it showing only in the gaps — which is the
+        /// selection that is there but cannot be seen. It appears the moment the Text area slot
+        /// stops being None, because None is the only setting that leaves this channel unwritten,
+        /// and it is worst on dark palettes, where the selection was never far from the page to
+        /// begin with.
+        ///
+        /// The page colour does not need this item. It belongs to "TextView Background", which is
+        /// painted underneath the selection and is written for the same slot a line below.
+        /// </summary>
+        private static readonly HashSet<string> NeverBackground =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "Plain Text",
             };
 
         /// <summary>
@@ -332,7 +354,8 @@ namespace XoCrazy.Core
                     // A surface that BackgroundOf named already has the background the palette
                     // meant for it. Overwriting that with the editor background flattens the
                     // collapsed-region block into the page and leaves its hint text floating.
-                    if (BackgroundOf.ContainsKey(surface) || NeverFilled.Contains(surface))
+                    if (BackgroundOf.ContainsKey(surface) || NeverFilled.Contains(surface)
+                        || NeverBackground.Contains(surface))
                         continue;
 
                     Snapshot.Record record;
@@ -377,13 +400,19 @@ namespace XoCrazy.Core
         /// the user is handing that territory back to Visual Studio, so its channels are
         /// written as inherited — otherwise switching a slot to None would leave the palette
         /// that was there before still painted, with no way to remove it.
+        ///
+        /// <paramref name="editorBackground"/> is the colour the views are painting behind the
+        /// code right now, as hex. It is a reference, never a value that gets written: it is
+        /// what the collapsed-region text is checked against when no slot supplied a background
+        /// for the block.
         /// </summary>
         public static List<Snapshot.Record> Compose(
             Guid category,
             ThemePreset foreground,
             ThemePreset textArea,
             ThemePreset editor,
-            IEnumerable<string> surfaces)
+            IEnumerable<string> surfaces,
+            string editorBackground = null)
         {
             var byItem = new Dictionary<string, Snapshot.Record>(StringComparer.OrdinalIgnoreCase);
 
@@ -425,17 +454,29 @@ namespace XoCrazy.Core
             // else in this method makes them differ. Changing only the Foreground slot is what
             // pairs them arbitrarily, and a pair with no contrast is the collapsed region reading
             // as blank. So the text is checked against the block it will actually sit in.
-            var box = textArea ?? editor ?? foreground;
-            string blockBackground = null;
-            if (box != null)
+            // The chain stops at the two slots that own backgrounds. Falling through to the
+            // Foreground palette is what made choosing a syntax palette alone paint a background
+            // on three items — the two collapsed-block names and the collapse hint below — which
+            // is precisely what PresetSlot.Foreground says it does not do, and those backgrounds
+            // then had to be cleared by hand. With neither background slot set the block keeps
+            // the editor's own background, and only its text is written.
+            var box = textArea ?? editor;
+            string blockBackground = box != null ? box.Get(Background) : null;
+
+            // What the text will actually sit on: the palette's block when a background slot
+            // supplied one, otherwise the editor background as it is painted right now. Checking
+            // against nothing is how the region text ended up invisible.
+            string blockSurface = blockBackground ?? editorBackground;
+
+            var textPalette = foreground ?? box;
+            if (textPalette != null)
             {
-                blockBackground = box.Get(Background);
                 string blockText = Readable(
-                    (foreground ?? box).Get(CollapsedText), blockBackground, box.Get(Foreground));
+                    textPalette.Get(CollapsedText), blockSurface, textPalette.Get(Foreground));
 
                 foreach (var name in CollapsedBlock)
                 {
-                    at(name).Background = blockBackground;
+                    at(name).Background = blockBackground;   // null stays null: inherited
                     at(name).Foreground = blockText;
                 }
             }
@@ -479,6 +520,11 @@ namespace XoCrazy.Core
                     // A stroke, not an area. Its background stays unwritten so it sits on
                     // whatever the row already has.
                     if (NeverFilled.Contains(surface))
+                        continue;
+
+                    // Drawn over the selection. Painting it here would put the covering layer
+                    // back through the Editor slot after the Text area slot stopped writing it.
+                    if (NeverBackground.Contains(surface))
                         continue;
 
                     bool isOverview = surface.StartsWith("OverviewMargin", StringComparison.OrdinalIgnoreCase);
@@ -1292,6 +1338,347 @@ namespace XoCrazy.Core
                         { ThemePreset.Operator, "#5E81AC" }, { ThemePreset.Selection, "#D8DEE9" },
                         { ThemePreset.LineNumber, "#9BA5B5" }, { ThemePreset.Error, "#BF616A" },
                         { ThemePreset.Warning, "#B48D3B" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Catppuccin Macchiato",
+                    Origin = "catppuccin.com — Macchiato",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#24273A" }, { ThemePreset.Foreground, "#CAD3F5" },
+                        { ThemePreset.Comment, "#6E738D" }, { ThemePreset.Keyword, "#C6A0F6" },
+                        { ThemePreset.Control, "#F5BDE6" }, { ThemePreset.String, "#A6DA95" },
+                        { ThemePreset.Number, "#F5A97F" }, { ThemePreset.Type, "#EED49F" },
+                        { ThemePreset.Method, "#8AADF4" }, { ThemePreset.Property, "#8BD5CA" },
+                        { ThemePreset.Field, "#8BD5CA" }, { ThemePreset.Parameter, "#EE99A0" },
+                        { ThemePreset.Operator, "#91D7E3" }, { ThemePreset.Selection, "#363A4F" },
+                        { ThemePreset.LineNumber, "#5B6078" }, { ThemePreset.Error, "#ED8796" },
+                        { ThemePreset.Warning, "#EED49F" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Catppuccin Frappé",
+                    Origin = "catppuccin.com — Frappé",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#303446" }, { ThemePreset.Foreground, "#C6D0F5" },
+                        { ThemePreset.Comment, "#737994" }, { ThemePreset.Keyword, "#CA9EE6" },
+                        { ThemePreset.Control, "#F4B8E4" }, { ThemePreset.String, "#A6D189" },
+                        { ThemePreset.Number, "#EF9F76" }, { ThemePreset.Type, "#E5C890" },
+                        { ThemePreset.Method, "#8CAAEE" }, { ThemePreset.Property, "#81C8BE" },
+                        { ThemePreset.Field, "#81C8BE" }, { ThemePreset.Parameter, "#EA999C" },
+                        { ThemePreset.Operator, "#99D1DB" }, { ThemePreset.Selection, "#414559" },
+                        { ThemePreset.LineNumber, "#626880" }, { ThemePreset.Error, "#E78284" },
+                        { ThemePreset.Warning, "#E5C890" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Rosé Pine Moon",
+                    Origin = "rosepinetheme.com — Moon",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#232136" }, { ThemePreset.Foreground, "#E0DEF4" },
+                        { ThemePreset.Comment, "#6E6A86" }, { ThemePreset.Keyword, "#3E8FB0" },
+                        { ThemePreset.Control, "#C4A7E7" }, { ThemePreset.String, "#F6C177" },
+                        { ThemePreset.Number, "#EA9A97" }, { ThemePreset.Type, "#9CCFD8" },
+                        { ThemePreset.Method, "#EB6F92" }, { ThemePreset.Property, "#9CCFD8" },
+                        { ThemePreset.Field, "#9CCFD8" }, { ThemePreset.Operator, "#908CAA" },
+                        { ThemePreset.Selection, "#2A283E" }, { ThemePreset.LineNumber, "#59546D" },
+                        { ThemePreset.Error, "#EB6F92" }, { ThemePreset.Warning, "#F6C177" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Ayu Light",
+                    Origin = "ayu — light",
+                    IsDark = false,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#FAFAFA" }, { ThemePreset.Foreground, "#5C6166" },
+                        { ThemePreset.Comment, "#ABADB1" }, { ThemePreset.Keyword, "#FA8D3E" },
+                        { ThemePreset.String, "#86B300" }, { ThemePreset.Number, "#A37ACC" },
+                        { ThemePreset.Type, "#399EE6" }, { ThemePreset.Method, "#F2AE49" },
+                        { ThemePreset.Operator, "#ED9366" }, { ThemePreset.Selection, "#D1E4F4" },
+                        { ThemePreset.LineNumber, "#8A9199" }, { ThemePreset.Error, "#E65050" },
+                        { ThemePreset.Warning, "#F2AE49" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Everforest Light",
+                    Origin = "everforest — light medium",
+                    IsDark = false,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#FDF6E3" }, { ThemePreset.Foreground, "#5C6A72" },
+                        { ThemePreset.Comment, "#939F91" }, { ThemePreset.Keyword, "#F85552" },
+                        { ThemePreset.Control, "#DF69BA" }, { ThemePreset.String, "#8DA101" },
+                        { ThemePreset.Number, "#DF69BA" }, { ThemePreset.Type, "#DFA000" },
+                        { ThemePreset.Method, "#3A94C5" }, { ThemePreset.Property, "#35A77C" },
+                        { ThemePreset.Field, "#35A77C" }, { ThemePreset.Operator, "#F57D26" },
+                        { ThemePreset.Selection, "#F0EEDA" }, { ThemePreset.LineNumber, "#A6B0A0" },
+                        { ThemePreset.Error, "#F85552" }, { ThemePreset.Warning, "#DFA000" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Gruvbox Material Dark",
+                    Origin = "gruvbox-material — dark medium",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#282828" }, { ThemePreset.Foreground, "#D4BE98" },
+                        { ThemePreset.Comment, "#928374" }, { ThemePreset.Keyword, "#EA6962" },
+                        { ThemePreset.Control, "#D3869B" }, { ThemePreset.String, "#A9B665" },
+                        { ThemePreset.Number, "#D3869B" }, { ThemePreset.Type, "#D8A657" },
+                        { ThemePreset.Method, "#A9B665" }, { ThemePreset.Property, "#7DAEA3" },
+                        { ThemePreset.Field, "#7DAEA3" }, { ThemePreset.Operator, "#E78A4E" },
+                        { ThemePreset.Selection, "#45403D" }, { ThemePreset.LineNumber, "#7C6F64" },
+                        { ThemePreset.Error, "#EA6962" }, { ThemePreset.Warning, "#D8A657" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Kanagawa Dragon",
+                    Origin = "kanagawa.nvim — Dragon",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#181616" }, { ThemePreset.Foreground, "#C5C9C5" },
+                        { ThemePreset.Comment, "#737C73" }, { ThemePreset.Keyword, "#8992A7" },
+                        { ThemePreset.Control, "#A292A3" }, { ThemePreset.String, "#8A9A7B" },
+                        { ThemePreset.Number, "#C4B28A" }, { ThemePreset.Type, "#8EA4A2" },
+                        { ThemePreset.Method, "#8BA4B0" }, { ThemePreset.Property, "#B6927B" },
+                        { ThemePreset.Field, "#B6927B" }, { ThemePreset.Operator, "#C4B28A" },
+                        { ThemePreset.Selection, "#2D4F67" }, { ThemePreset.LineNumber, "#625E5A" },
+                        { ThemePreset.Error, "#C4746E" }, { ThemePreset.Warning, "#C4B28A" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Kanagawa Lotus",
+                    Origin = "kanagawa.nvim — Lotus",
+                    IsDark = false,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#F2ECBC" }, { ThemePreset.Foreground, "#545464" },
+                        { ThemePreset.Comment, "#8A8980" }, { ThemePreset.Keyword, "#624C83" },
+                        { ThemePreset.Control, "#B35B79" }, { ThemePreset.String, "#6F894E" },
+                        { ThemePreset.Number, "#B35B79" }, { ThemePreset.Type, "#597B75" },
+                        { ThemePreset.Method, "#4D699B" }, { ThemePreset.Property, "#43436C" },
+                        { ThemePreset.Field, "#43436C" }, { ThemePreset.Operator, "#CC6D00" },
+                        { ThemePreset.Selection, "#E5DDB0" }, { ThemePreset.LineNumber, "#A6A69C" },
+                        { ThemePreset.Error, "#C84053" }, { ThemePreset.Warning, "#77713F" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Oxocarbon",
+                    Origin = "IBM Carbon — oxocarbon dark",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#161616" }, { ThemePreset.Foreground, "#F2F4F8" },
+                        { ThemePreset.Comment, "#6F6F6F" }, { ThemePreset.Keyword, "#FF7EB6" },
+                        { ThemePreset.String, "#42BE65" }, { ThemePreset.Number, "#3DDBD9" },
+                        { ThemePreset.Type, "#08BDBA" }, { ThemePreset.Method, "#BE95FF" },
+                        { ThemePreset.Property, "#33B1FF" }, { ThemePreset.Field, "#33B1FF" },
+                        { ThemePreset.Operator, "#3DDBD9" }, { ThemePreset.Selection, "#393939" },
+                        { ThemePreset.LineNumber, "#525252" }, { ThemePreset.Error, "#EE5396" },
+                        { ThemePreset.Warning, "#FFE97B" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Poimandres",
+                    Origin = "poimandres — storm",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#1B1E28" }, { ThemePreset.Foreground, "#A6ACCD" },
+                        { ThemePreset.Comment, "#506477" }, { ThemePreset.Keyword, "#ADD7FF" },
+                        { ThemePreset.Control, "#FCC5E9" }, { ThemePreset.String, "#5DE4C7" },
+                        { ThemePreset.Number, "#FAE4FC" }, { ThemePreset.Type, "#5FB3A1" },
+                        { ThemePreset.Method, "#ADD7FF" }, { ThemePreset.Property, "#E4F0FB" },
+                        { ThemePreset.Field, "#E4F0FB" }, { ThemePreset.Operator, "#91B4D5" },
+                        { ThemePreset.Selection, "#303340" }, { ThemePreset.LineNumber, "#454B5B" },
+                        { ThemePreset.Error, "#D0679D" }, { ThemePreset.Warning, "#FFFAC2" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Vitesse Dark",
+                    Origin = "antfu/vscode-theme-vitesse",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#121212" }, { ThemePreset.Foreground, "#DBD7CA" },
+                        { ThemePreset.Comment, "#758575" }, { ThemePreset.Keyword, "#4D9375" },
+                        { ThemePreset.String, "#C98A7D" }, { ThemePreset.Number, "#4C9A91" },
+                        { ThemePreset.Type, "#5DA994" }, { ThemePreset.Method, "#80A665" },
+                        { ThemePreset.Property, "#B8A965" }, { ThemePreset.Field, "#B8A965" },
+                        { ThemePreset.Operator, "#BD976A" }, { ThemePreset.Selection, "#444444" },
+                        { ThemePreset.LineNumber, "#5A5A5A" }, { ThemePreset.Error, "#CB7676" },
+                        { ThemePreset.Warning, "#D4976C" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Vitesse Light",
+                    Origin = "antfu/vscode-theme-vitesse — light",
+                    IsDark = false,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#FFFFFF" }, { ThemePreset.Foreground, "#393A34" },
+                        { ThemePreset.Comment, "#A0ADA0" }, { ThemePreset.Keyword, "#1E754F" },
+                        { ThemePreset.String, "#B56959" }, { ThemePreset.Number, "#2F798A" },
+                        { ThemePreset.Type, "#2E808F" }, { ThemePreset.Method, "#59873A" },
+                        { ThemePreset.Property, "#B07D48" }, { ThemePreset.Field, "#B07D48" },
+                        { ThemePreset.Operator, "#A65E2B" }, { ThemePreset.Selection, "#E5E5E5" },
+                        { ThemePreset.LineNumber, "#B8B8B8" }, { ThemePreset.Error, "#AB5959" },
+                        { ThemePreset.Warning, "#BDA437" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Aura Dark",
+                    Origin = "aura-theme.com",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#15141B" }, { ThemePreset.Foreground, "#EDECEE" },
+                        { ThemePreset.Comment, "#6D6D6D" }, { ThemePreset.Keyword, "#A277FF" },
+                        { ThemePreset.String, "#61FFCA" }, { ThemePreset.Number, "#FFCA85" },
+                        { ThemePreset.Type, "#82E2FF" }, { ThemePreset.Method, "#FFCA85" },
+                        { ThemePreset.Property, "#EDECEE" }, { ThemePreset.Field, "#EDECEE" },
+                        { ThemePreset.Operator, "#A277FF" }, { ThemePreset.Selection, "#29263C" },
+                        { ThemePreset.LineNumber, "#4D4D4D" }, { ThemePreset.Error, "#FF6767" },
+                        { ThemePreset.Warning, "#FFCA85" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Moonlight II",
+                    Origin = "atomiks/moonlight — II",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#212337" }, { ThemePreset.Foreground, "#C8D3F5" },
+                        { ThemePreset.Comment, "#7A88CF" }, { ThemePreset.Keyword, "#C099FF" },
+                        { ThemePreset.Control, "#FF98A4" }, { ThemePreset.String, "#C3E88D" },
+                        { ThemePreset.Number, "#FF98A4" }, { ThemePreset.Type, "#86E1FC" },
+                        { ThemePreset.Method, "#82AAFF" }, { ThemePreset.Property, "#B4F9F8" },
+                        { ThemePreset.Field, "#B4F9F8" }, { ThemePreset.Operator, "#86E1FC" },
+                        { ThemePreset.Selection, "#383E5C" }, { ThemePreset.LineNumber, "#4A5279" },
+                        { ThemePreset.Error, "#FF757F" }, { ThemePreset.Warning, "#FFC777" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Material Ocean",
+                    Origin = "Material Theme — Ocean",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#0F111A" }, { ThemePreset.Foreground, "#8F93A2" },
+                        { ThemePreset.Comment, "#464B5D" }, { ThemePreset.Keyword, "#C792EA" },
+                        { ThemePreset.String, "#C3E88D" }, { ThemePreset.Number, "#F78C6C" },
+                        { ThemePreset.Type, "#FFCB6B" }, { ThemePreset.Method, "#82AAFF" },
+                        { ThemePreset.Property, "#89DDFF" }, { ThemePreset.Field, "#89DDFF" },
+                        { ThemePreset.Operator, "#89DDFF" }, { ThemePreset.Selection, "#1F2233" },
+                        { ThemePreset.LineNumber, "#3B4053" }, { ThemePreset.Error, "#FF5370" },
+                        { ThemePreset.Warning, "#FFCB6B" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Tomorrow Night Eighties",
+                    Origin = "chriskempson/tomorrow-theme",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#2D2D2D" }, { ThemePreset.Foreground, "#CCCCCC" },
+                        { ThemePreset.Comment, "#999999" }, { ThemePreset.Keyword, "#CC99CC" },
+                        { ThemePreset.String, "#99CC99" }, { ThemePreset.Number, "#F99157" },
+                        { ThemePreset.Type, "#FFCC66" }, { ThemePreset.Method, "#6699CC" },
+                        { ThemePreset.Property, "#66CCCC" }, { ThemePreset.Field, "#66CCCC" },
+                        { ThemePreset.Operator, "#66CCCC" }, { ThemePreset.Selection, "#515151" },
+                        { ThemePreset.LineNumber, "#6E6E6E" }, { ThemePreset.Error, "#F2777A" },
+                        { ThemePreset.Warning, "#FFCC66" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Iceberg",
+                    Origin = "cocopon/iceberg.vim — dark",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#161821" }, { ThemePreset.Foreground, "#C6C8D1" },
+                        { ThemePreset.Comment, "#6B7089" }, { ThemePreset.Keyword, "#84A0C6" },
+                        { ThemePreset.String, "#89B8C2" }, { ThemePreset.Number, "#A093C7" },
+                        { ThemePreset.Type, "#B4BE82" }, { ThemePreset.Method, "#84A0C6" },
+                        { ThemePreset.Property, "#89B8C2" }, { ThemePreset.Field, "#89B8C2" },
+                        { ThemePreset.Operator, "#E2A478" }, { ThemePreset.Selection, "#272C42" },
+                        { ThemePreset.LineNumber, "#444B71" }, { ThemePreset.Error, "#E27878" },
+                        { ThemePreset.Warning, "#E2A478" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Nightfly",
+                    Origin = "bluz71/vim-nightfly-colors",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#011627" }, { ThemePreset.Foreground, "#C3CCDC" },
+                        { ThemePreset.Comment, "#637777" }, { ThemePreset.Keyword, "#C792EA" },
+                        { ThemePreset.String, "#ECC48D" }, { ThemePreset.Number, "#F78C6C" },
+                        { ThemePreset.Type, "#FFCB8B" }, { ThemePreset.Method, "#82AAFF" },
+                        { ThemePreset.Property, "#7FDBCA" }, { ThemePreset.Field, "#7FDBCA" },
+                        { ThemePreset.Operator, "#7FDBCA" }, { ThemePreset.Selection, "#1D3B53" },
+                        { ThemePreset.LineNumber, "#4B6479" }, { ThemePreset.Error, "#FC514E" },
+                        { ThemePreset.Warning, "#E3D18A" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Base16 Ocean",
+                    Origin = "chriskempson/base16 — ocean",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#2B303B" }, { ThemePreset.Foreground, "#C0C5CE" },
+                        { ThemePreset.Comment, "#65737E" }, { ThemePreset.Keyword, "#B48EAD" },
+                        { ThemePreset.String, "#A3BE8C" }, { ThemePreset.Number, "#D08770" },
+                        { ThemePreset.Type, "#EBCB8B" }, { ThemePreset.Method, "#8FA1B3" },
+                        { ThemePreset.Property, "#96B5B4" }, { ThemePreset.Field, "#96B5B4" },
+                        { ThemePreset.Operator, "#96B5B4" }, { ThemePreset.Selection, "#4F5B66" },
+                        { ThemePreset.LineNumber, "#65737E" }, { ThemePreset.Error, "#BF616A" },
+                        { ThemePreset.Warning, "#EBCB8B" },
+                    }
+                },
+                new ThemePreset
+                {
+                    Name = "Melange Dark",
+                    Origin = "savq/melange — dark",
+                    IsDark = true,
+                    Roles =
+                    {
+                        { ThemePreset.Background, "#292522" }, { ThemePreset.Foreground, "#ECE1D7" },
+                        { ThemePreset.Comment, "#867462" }, { ThemePreset.Keyword, "#B380B0" },
+                        { ThemePreset.String, "#85B695" }, { ThemePreset.Number, "#D47766" },
+                        { ThemePreset.Type, "#EBC06D" }, { ThemePreset.Method, "#A3A9CE" },
+                        { ThemePreset.Property, "#89B3B6" }, { ThemePreset.Field, "#89B3B6" },
+                        { ThemePreset.Operator, "#ECE1D7" }, { ThemePreset.Selection, "#403A36" },
+                        { ThemePreset.LineNumber, "#6B5F55" }, { ThemePreset.Error, "#D47766" },
+                        { ThemePreset.Warning, "#EBC06D" },
                     }
                 },
             };
